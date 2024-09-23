@@ -1,11 +1,24 @@
 param (
-    [Parameter(Mandatory=$true, HelpMessage="The DB server that will host the meta data database")]
-    [string]$CentralDBServer,
-    [Parameter(Mandatory=$true, HelpMessage="The DB server login name")]
-    [string]$CentralDBLogin,
-    [Parameter(Mandatory=$true, HelpMessage="The DB server password")]
-    [string]$CentralDBPwd
+    [Parameter(Mandatory=$true, HelpMessage="The Azure Key Vault name")]
+        [string] $AzureKeyVaultName,
+    [Parameter(Mandatory=$true, HelpMessage="The Azure SQL Database credentials secret name")]    
+        [string] $AzureCentralDBCredsSecretName
 )
+# retrieve DB credentials from Azure Key Vault
+$secret = Get-AzKeyVaultSecret -VaultName "$AzureKeyVaultName" -Name "$AzureCentralDBCredsSecretName" -AsPlainText
+$properties = $secret -split "`n" | ForEach-Object {
+    $key, $value = $_ -split ":", 2
+    $key.Trim(), $value.Trim()
+}
+$propertiesHashTable = @{}
+for ($i = 0; $i -lt $properties.Length; $i += 2) {
+    $propertiesHashTable[$properties[$i]] = $properties[$i + 1]
+}
+# Access individual properties
+$CentralDBServer = $propertiesHashTable["Host"]
+$CentralDBLogin = $propertiesHashTable["User"]
+$CentralDBPwd = $propertiesHashTable["Password"]
+
 
 #get pending tenants
 $pendingTenants = @"
@@ -38,7 +51,7 @@ try {
         Invoke-Sqlcmd -ServerInstance $serverName -Database master -Query $enableChangeTracking -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd -QueryTimeout 0 -ErrorAction Stop
     
         #create tables/SPs in the tenant database
-        $ddlsql = Get-Content -Raw -Path "$PSScriptRoot\DDLScriptsTenantDatabase.sql"
+        $ddlsql = Get-Content -Raw -Path "$PSScriptRoot\DDLScripts-TenantDatabase.sql"
         $ddlsql = $ddlsql -replace "REPLACE_WITH_TENANT_CODE", $tenantCode
 
 
