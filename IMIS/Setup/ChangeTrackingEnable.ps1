@@ -19,6 +19,8 @@ $tenants = Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database DataExport -
 
 foreach($tenant in $tenants)
 {
+try {
+    
     $tenantCode = $tenant.TenantCode
     $serverName = $tenant.ServerName
     $dbName = $tenant.DBName
@@ -35,14 +37,26 @@ foreach($tenant in $tenants)
         
         Invoke-Sqlcmd -ServerInstance $serverName -Database master -Query $enableChangeTracking -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd -QueryTimeout 0 -ErrorAction Stop
     
+        #create tables/SPs in the tenant database
+        $ddlsql = Get-Content -Raw -Path "$PSScriptRoot\DDLScriptsTenantDatabase.sql"
+        $ddlsql = $ddlsql -replace "REPLACE_WITH_TENANT_CODE", $tenantCode
+
+
+        $sqlstatements = $ddlsql -split "(?m)^\s*GO\s*$", 0, "multiline"
+        foreach($sql in $sqlstatements)
+        {
+         #   Write-Host $sql
+           Invoke-Sqlcmd -ServerInstance $serverName -Database $dbName -Query $sql -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
+        }
+
     #enable change tracking on the tenant tables
     $tableSQL = @"
     SELECT SchemaName, TableName
-    FROM ChangeTrackingTablesToExport
+    FROM dbo.ChangeTrackingTablesToExport
     WHERE TenantCode = '$tenantCode'
     AND EnabledForExport = 'pending'
 "@
-    $tables = Invoke-Sqlcmd -ServerInstance  $CentralDBServer -Database DataExport -Query $tableSQL -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
+    $tables = Invoke-Sqlcmd -ServerInstance  $serverName -Database $dbName -Query $tableSQL -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
 
     foreach($table in $tables)
     {
@@ -64,7 +78,7 @@ foreach($tenant in $tenants)
         AND SchemaName = '$schemaName'
         AND TableName = '$tableName'      
 "@
-        Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database DataExport -Query $updateTableStatus -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd -QueryTimeout 0 -ErrorAction Stop
+        Invoke-Sqlcmd -ServerInstance $serverName -Database $dbName -Query $updateTableStatus -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd -QueryTimeout 0 -ErrorAction Stop
     }
 
 
@@ -74,6 +88,17 @@ foreach($tenant in $tenants)
         WHERE TenantCode = '$tenantCode'        
 "@        
         Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database DataExport -Query $updateTenantStatus -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd -QueryTimeout 0 -ErrorAction Stop
+
+
+}
+catch {
+    Write-Log -errorLevel ERROR -message "Tenant: $tenantCode | Server: $serverName | DB: $dbName"
+    Write-Log -errorLevel ERROR -message $_.Exception.Message -stack $_.Exception.StackTrace
+    Write-log -errorLevel ERROR -message $_.Exception.InnerException
+    throw
+
+}    
+
 }
 
 # get all enabled tenants and enabled tables that are pending; this can be from new tables that are added for the tenant or tables that were missed in the initial setup
@@ -98,7 +123,7 @@ foreach($tenant in $enabledTenants)
     WHERE TenantCode = '$tenantCode'
     AND EnabledForExport = 'Pending'
 "@
-    $tables = Invoke-Sqlcmd -ServerInstance  $CentralDBServer -Database DataExport -Query $tableSQL -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
+    $tables = Invoke-Sqlcmd -ServerInstance  $serverName -Database $dbName -Query $tableSQL -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
 
     foreach($table in $tables)
     {
@@ -120,7 +145,7 @@ foreach($tenant in $enabledTenants)
             AND SchemaName = '$schemaName'
             AND TableName = '$tableName'            
 "@
-            Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database DataExport -Query $updateTableStatus -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd -QueryTimeout 0 -ErrorAction Stop
+            Invoke-Sqlcmd -ServerInstance $serverName -Database $dbName -Query $updateTableStatus -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd -QueryTimeout 0 -ErrorAction Stop
     
     
             }
