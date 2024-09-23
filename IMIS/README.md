@@ -23,9 +23,11 @@ Instructions to setup an export from a SQL Server hosted database.
 	- Save the changes.
   - Test Secret Access From VM:
 	- On VM, use following powershell script to test access:
-	> Connect-AzAccount -Identity
-	> $secret = Get-AzKeyVaultSecret -VaultName "<KeyVaultName>" -Name "<SecretName>" -AsPlainText
-- Setup a windows virtual server. Optionally, add a non-OC volume to store setup scripts and exported files. If separate volume not added, the OS volume will be used to store the files and may be lost in event of instance termination.
+```
+Connect-AzAccount -Identity
+$secret = Get-AzKeyVaultSecret -VaultName "<KeyVaultName>" -Name "<SecretName>" -AsPlainText
+```
+- Setup a windows virtual server. Optionally, add a non-OS volume to store setup scripts and exported files. If separate volume not added, the OS volume will be used to store the files and may be lost in event of instance termination.
 - [Download](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.4) and install Powershell 7 on virtual server.
 - Clone repo or copy files from repo to new instance.
 
