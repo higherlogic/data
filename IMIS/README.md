@@ -13,13 +13,13 @@ Instructions to setup an export from a SQL Server hosted database.
   - Ensure Managed Identity is Enabled:
 	- Go to the Azure portal.
 	- Navigate to your VM.
-	- Under the “Settings” section, select “Identity”.
-	- Ensure the “System assigned” managed identity is turned on.
+	- Under the "Settings" section, select "Identity".
+	- Ensure the "System assigned" managed identity is turned on.
   - Assign Key Vault RBAC Roles:
 	- Go to your Key Vault in the Azure portal.
-	- Under “Access control (IAM)”, click on “+ Add role assignment”.
-	- Select the role “Key Vault Secrets User”.
-	- In the “Members” section, select “Managed identity” and then choose your VM.
+	- Under "Access control (IAM)", click on "+ Add role assignment".
+	- Select the role "Key Vault Secrets User".
+	- In the "Members" section, select "Managed identity" and then choose your VM.
 	- Save the changes.
   - Test Secret Access From VM:
 	- On VM, use following powershell script to test access:
