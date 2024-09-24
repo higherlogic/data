@@ -4,25 +4,34 @@ param (
     [Parameter(Mandatory=$true, HelpMessage="The Azure SQL Database credentials secret name")]    
         [string]    $AzureCentralDBCredsSecretName,
     [Parameter(Mandatory=$true, HelpMessage="The folder to export data to")]
-        [string] $ExportFolderBasePath
+        [string] $ExportFolderBasePath,
+    [Parameter(Mandatory=$true, HelpMessage="The database where meta information is stored")]
+        [string] $CentralDatabaseName   
     
 )
 
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
-Install-Module -Name Az -Repository PSGallery -Force
+# Import Az modules
+if (! (Get-Module -ListAvailable -Name "Az")) {
+    Write-Host "Az module does not exist"
+    Install-Module -Name "Az" -Force -SkipPublisherCheck -Scope AllUsers
+}
+
+Import-Module Az
+
 
 # Import SQL Server module
 if (! (Get-Module -ListAvailable -Name SqlServer)) {
     Write-Host "SqlServer module does not exist"
-    Install-Module -Name SqlServer -Force -SkipPublisherCheck
+    Install-Module -Name SqlServer -Force -SkipPublisherCheck -Scope AllUsers
 } 
 
 Import-Module SqlServer
 
 if (! (Get-Module -ListAvailable -Name Write-Log)) {
     Write-Host "Write-Log module does not exist"
-    Install-Module -Name Write-Log -Force -SkipPublisherCheck
+    Install-Module -Name Write-Log -Force -SkipPublisherCheck -Scope AllUsers
 } 
 Import-Module Write-Log
 
@@ -31,6 +40,7 @@ Write-log -errorLevel INFO -message "Setup started..."
 
 
 # retrieve DB credentials from Azure Key Vault
+Connect-AzAccount -Identity
 $secret = Get-AzKeyVaultSecret -VaultName "$AzureKeyVaultName" -Name "$AzureCentralDBCredsSecretName" -AsPlainText
 $properties = $secret -split "`n" | ForEach-Object {
     $key, $value = $_ -split ":", 2
@@ -47,7 +57,7 @@ $CentralDBPwd = $propertiesHashTable["Password"]
 
 
 # check DB connection
-$CentralDBServerCheck = Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database DataExport -Query "SELECT getdate() as CurrentDate" -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
+$CentralDBServerCheck = Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database $CentralDatabaseName -Query "SELECT getdate() as CurrentDate" -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
 if($CentralDBServerCheck.CurrentDate -ne "")
 {
     Write-Host "Successfully connected to database server"
@@ -67,7 +77,7 @@ $sqlstatements = $ddlsql -split "(?m)^\s*GO\s*$", 0, "multiline"
 foreach($sql in $sqlstatements)
 {
  #   Write-Host $sql
-   Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database DataExport -Query $sql -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
+   Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database $CentralDatabaseName -Query $sql -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
 }
 
 
@@ -92,7 +102,7 @@ $taskTrigger4 = New-ScheduledTaskTrigger -Once -At 00:30 `
         -RepetitionDuration (New-TimeSpan -Hours 23 -Minutes 55)
 $taskTrigger3.Repetition = $taskTrigger4.Repetition
 $changeTrackingExportScriptPath = "$scriptfolder\ExtractChangedData.ps1"
-$taskActions = (New-ScheduledTaskAction -Execute '"C:\Program Files\PowerShell\7\pwsh.exe"' -Argument "$changeTrackingExportScriptPath -ExportFolderBasePath $ExportFolderBasePath  -AzureKeyVaultName $AzureKeyVaultName -AzureCentralDBCredsSecretName $AzureCentralDBCredsSecretName")
+$taskActions = (New-ScheduledTaskAction -Execute '"C:\Program Files\PowerShell\7\pwsh.exe"' -Argument "$changeTrackingExportScriptPath -ExportFolderBasePath $ExportFolderBasePath  -AzureKeyVaultName $AzureKeyVaultName -AzureCentralDBCredsSecretName $AzureCentralDBCredsSecretName -Database $CentralDatabaseName")
 Register-ScheduledTask -TaskName 'Export Changed Data' -Action $taskActions -Trigger $taskTrigger3 -User "SYSTEM" -RunLevel Highest -Description 'Export changed data for all tenants' -Force
 
 

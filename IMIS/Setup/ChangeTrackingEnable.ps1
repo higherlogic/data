@@ -4,7 +4,18 @@ param (
     [Parameter(Mandatory=$true, HelpMessage="The Azure SQL Database credentials secret name")]    
         [string] $AzureCentralDBCredsSecretName
 )
+
+try
+{
+
+    Import-Module Az.Accounts
+    Import-Module Az.KeyVault
+    Import-Module SqlServer
+    Import-Module Write-Log
+
+
 # retrieve DB credentials from Azure Key Vault
+Connect-AzAccount -Identity
 $secret = Get-AzKeyVaultSecret -VaultName "$AzureKeyVaultName" -Name "$AzureCentralDBCredsSecretName" -AsPlainText
 $properties = $secret -split "`n" | ForEach-Object {
     $key, $value = $_ -split ":", 2
@@ -29,6 +40,15 @@ ORDER BY TenantCode
 "@
 
 $tenants = Invoke-Sqlcmd -ServerInstance $CentralDBServer -Database DataExport -Query $pendingTenants -TrustServerCertificate -Username $CentralDBLogin -Password $CentralDBPwd
+}
+catch
+{
+    Write-Log -errorLevel ERROR -message $_.Exception.Message -stack $_.Exception.StackTrace
+    Write-log -errorLevel ERROR -message $_.Exception.InnerException
+    throw
+
+}
+Write-Log -errorLevel INFO -message "Change tracking pending tenants: $($tenants.Count)"  
 
 foreach($tenant in $tenants)
 {
